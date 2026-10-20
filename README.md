@@ -8,8 +8,8 @@ El diseño del script cumple con estrictas restricciones técnicas universitaria
 
 ## ⚙️ Arquitectura y Decisiones de Diseño Técnico
 
-### 1. Evasión de Huellas (Playwright Stealth)
-Para reducir la probabilidad de detección algorítmica por parte de las defensas de TikTok, el script implementa la librería `playwright-stealth`. Esta capa de invisibilidad borra los rastros internos de Chromium que delatan la automatización, permitiendo que el bot navegue simulando ser un usuario humano estándar.
+### 1. Evasión Nativa de Chromium
+Para reducir la probabilidad de detección algorítmica por parte de las defensas de TikTok sin depender de librerías de terceros inestables, el script modifica los parámetros de lanzamiento nativos del motor Chromium. Se inyecta el argumento `--disable-blink-features=AutomationControlled` para borrar las banderas internas que delatan la automatización, permitiendo una navegación más limpia.
 
 ### 2. Manejo de Sesiones (Evasión de Login Wall)
 Para evitar los bloqueos agresivos que TikTok impone a la navegación anónima, el sistema utiliza un modelo de inyección de estado. Se captura una sesión humana real en el archivo `state.json` y se inyecta en el contexto de Chromium. 
@@ -30,7 +30,7 @@ El programa se ejecuta de forma visual (`headless=False`) y con tiempos de esper
 
 ### Tecnologías Utilizadas
 - **Python:** 3.15.0
-- **Librerías:** `playwright`, `playwright-stealth`
+- **Librería Principal:** `playwright`
 - **Navegador:** Chromium
 
 ### Instrucciones de Despliegue
