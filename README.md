@@ -39,3 +39,4 @@ El programa se ejecuta de forma visual (`headless=False`) y con tiempos de esper
    ```bash
    git clone [https://github.com/msrodriguezv/scraper_tiktok.git](https://github.com/msrodriguezv/scraper_tiktok.git)
    cd scraper_tiktok
+
