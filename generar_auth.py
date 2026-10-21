@@ -1,23 +1,23 @@
-import asyncio
-from playwright.async_api import async_playwright
+from playwright.sync_api import sync_playwright
 
-async def guardar_sesion():
-    async with async_playwright() as p:
-        # headless=False abre el navegador visiblemente
-        browser = await p.chromium.launch(headless=False)
-        context = await browser.new_context()
-        page = await context.new_page()
+def generar_estado():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        context = browser.new_context()
+        page = context.new_page()
         
-        await page.goto("https://www.tiktok.com/login")
-        print("Tienes 60 segundos para iniciar sesión manualmente en la ventana que se abrió...")
+        print("Navegando a TikTok...")
+        page.goto("https://www.tiktok.com/login")
         
-        # Espera 60 segundos mientras pones tu usuario y contraseña
-        await page.wait_for_timeout(60000) 
+        print("Tienes 2 minutos para iniciar sesión manualmente y resolver cualquier CAPTCHA.")
+        # Pausa la ejecución por 120 segundos para que te dé tiempo de loguearte
+        page.wait_for_timeout(120000) 
         
-        # Guarda las cookies y tokens de sesión
-        await context.storage_state(path="state.json")
-        print("¡Sesión capturada con éxito! Archivo state.json generado.")
+        # Guarda las cookies y el almacenamiento local
+        context.storage_state(path="state.json")
+        print("¡Sesión guardada exitosamente en state.json!")
         
-        await browser.close()
+        browser.close()
 
-asyncio.run(guardar_sesion())
+if __name__ == "__main__":
+    generar_estado()

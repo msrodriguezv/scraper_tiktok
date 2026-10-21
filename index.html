@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TikTok Scraper</title>
+<style>
+  :root {
+    --bg: #f6f6f7; --card: #fff; --text: #161823; --muted: #6b6d76;
+    --border: #e3e3e6; --accent: #fe2c55; --accent2: #25f4ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121212; --card: #1e1e22; --text: #f1f1f2; --muted: #9a9ba3; --border: #2e2e33; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 1000px; margin: 0 auto; padding: 32px 16px; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+  input { flex: 1 1 220px; padding: 10px 12px; font-size: 1rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); }
+  button { padding: 10px 16px; font-size: .95rem; border: 0; border-radius: 8px; cursor: pointer; font-weight: 600; }
+  button.primary { background: var(--accent); color: #fff; }
+  button.secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  button:disabled { opacity: .5; cursor: wait; }
+  .estado { padding: 12px 14px; border-radius: 8px; margin-bottom: 20px; background: var(--card); border: 1px solid var(--border); }
+  .estado.error { border-color: var(--accent); color: var(--accent); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .stat .label { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+  .stat .valor { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+  h2 { font-size: 1.1rem; margin: 0 0 12px; }
+  .tabla-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  th.num { text-align: right; }
+  tr:last-child td { border-bottom: 0; }
+  a { color: var(--accent); }
+  details summary { cursor: pointer; color: var(--muted); }
+  details ul { margin: 6px 0 0; padding-left: 18px; }
+  .vacio { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+<main>
+  <h1>TikTok <span>Scraper</span></h1>
+  <p class="sub">Métricas del perfil y de sus últimos 10 videos.</p>
+
+  <form id="form">
+    <input id="usuario" placeholder="Usuario de TikTok, ej. tittaa.ec" value="tittaa.ec" required>
+    <button type="submit" class="primary" id="btnScrap">Extraer datos</button>
+    <button type="button" class="secondary" id="btnGuardado">Ver últimos guardados</button>
+  </form>
+
+  <div id="estado" class="estado" hidden></div>
+  <section id="resultado" hidden>
+    <div class="stats" id="stats"></div>
+    <h2>Videos</h2>
+    <div class="tabla-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Video</th><th class="num">Vistas</th><th class="num">Likes</th><th class="num">Coment.</th><th>Comentarios</th></tr></thead>
+        <tbody id="filas"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Convierte "12.4K" / "1.2M" / "1379" a número para poder sumar
+function aNumero(v) {
+  if (v == null) return 0;
+  const m = String(v).trim().toUpperCase().match(/^([\d.,]+)\s*([KMB])?$/);
+  if (!m) return 0;
+  const n = parseFloat(m[1].replace(",", "."));
+  return n * ({ K: 1e3, M: 1e6, B: 1e9 }[m[2]] || 1);
+}
+
+function formato(n) {
+  return n.toLocaleString("es-EC", { maximumFractionDigits: 0 });
+}
+
+function mostrarEstado(texto, error = false) {
+  $("estado").textContent = texto;
+  $("estado").className = "estado" + (error ? " error" : "");
+  $("estado").hidden = false;
+}
+
+function pintar(d) {
+  const videos = d.videos || [];
+  const totalVistas = videos.reduce((a, v) => a + aNumero(v.vistas), 0);
+  const totalLikes = videos.reduce((a, v) => a + aNumero(v.likes), 0);
+
+  $("stats").innerHTML = [
+    ["Usuario", "@" + esc(d.username)],
+    ["Seguidores", esc(d.seguidores ?? "—")],
+    ["Seguidos", esc(d.seguidos ?? "—")],
+    ["Vistas (10 videos)", formato(totalVistas)],
+    ["Likes (10 videos)", formato(totalLikes)],
+  ].map(([l, v]) => `<div class="stat"><div class="label">${l}</div><div class="valor">${v}</div></div>`).join("");
+
+  $("filas").innerHTML = videos.length ? videos.map((v, i) => {
+    const id = (v.url || "").split("/video/")[1] || v.url;
+    const coms = (v.comentarios || []).filter(c => c !== "Sin comentarios o deshabilitados");
+    const celdaComs = coms.length
+      ? `<details><summary>Ver ${coms.length}</summary><ul>${coms.map(c => `<li>${esc(c)}</li>`).join("")}</ul></details>`
+      : `<span class="vacio">Sin comentarios</span>`;
+    return `<tr>
+      <td>${i + 1}</td>
+      <td><a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(id)}</a></td>
+      <td class="num">${esc(v.vistas ?? "—")}</td>
+      <td class="num">${esc(v.likes ?? "—")}</td>
+      <td class="num">${esc(v.num_comentarios ?? "—")}</td>
+      <td>${celdaComs}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="6" class="vacio">No se extrajeron videos.</td></tr>`;
+
+  $("resultado").hidden = false;
+}
+
+async function cargar(ruta, mensajeEspera) {
+  const usuario = $("usuario").value.trim();
+  if (!usuario) return;
+  $("btnScrap").disabled = $("btnGuardado").disabled = true;
+  mostrarEstado(mensajeEspera);
+  try {
+    const r = await fetch(ruta + encodeURIComponent(usuario));
+    const json = await r.json();
+    if (!r.ok) throw new Error(json.detail || "Error " + r.status);
+    const datos = json.datos || json;
+    pintar(datos);
+    mostrarEstado(`Datos de @${datos.username} cargados (${(datos.videos || []).length} videos).`);
+  } catch (e) {
+    mostrarEstado("Error: " + e.message, true);
+  } finally {
+    $("btnScrap").disabled = $("btnGuardado").disabled = false;
+  }
+}
+
+$("form").addEventListener("submit", e => {
+  e.preventDefault();
+  cargar("/scrapi/", "Extrayendo datos… se abrirá una ventana de Chrome. Puede tardar 1–2 minutos.");
+});
+$("btnGuardado").addEventListener("click", () => cargar("/datos/", "Cargando datos guardados…"));
+</script>
+</body>
+</html>
