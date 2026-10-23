@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TikTok Scraper</title>
+<style>
+  :root {
+    --bg: #f6f6f7; --card: #fff; --text: #161823; --muted: #6b6d76;
+    --border: #e3e3e6; --accent: #fe2c55; --accent2: #25f4ee;
+    /* Un color fijo por rasgo para la barra de distribución (paleta apta para daltonismo) */
+    --apertura: #2a78d6; --responsabilidad: #eb6834; --extraversion: #1baf7a;
+    --amabilidad: #eda100; --neuroticismo: #e87ba4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121212; --card: #1e1e22; --text: #f1f1f2; --muted: #9a9ba3; --border: #2e2e33;
+      --apertura: #3987e5; --responsabilidad: #d95926; --extraversion: #199e70;
+      --amabilidad: #c98500; --neuroticismo: #d55181;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 1000px; margin: 0 auto; padding: 32px 16px; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+  input { flex: 1 1 220px; padding: 10px 12px; font-size: 1rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); }
+  button { padding: 10px 16px; font-size: .95rem; border: 0; border-radius: 8px; cursor: pointer; font-weight: 600; }
+  button.primary { background: var(--accent); color: #fff; }
+  button.secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  button:disabled { opacity: .5; cursor: wait; }
+  .estado { padding: 12px 14px; border-radius: 8px; margin-bottom: 20px; background: var(--card); border: 1px solid var(--border); }
+  .estado.error { border-color: var(--accent); color: var(--accent); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .stat .label { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+  .stat .valor { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+  h2 { font-size: 1.1rem; margin: 28px 0 12px; }
+  .tabla-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  th.num { text-align: right; }
+  tr:last-child td { border-bottom: 0; }
+  a { color: var(--accent); }
+  details summary { cursor: pointer; color: var(--muted); }
+  details ul { margin: 6px 0 0; padding-left: 18px; }
+  details ul ul { margin-top: 2px; }
+  .vacio { color: var(--muted); font-style: italic; }
+  .bio, .caja { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+  .bio { white-space: pre-line; }
+  .label { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .desc { margin-top: 4px; max-width: 320px; }
+  .tags { color: var(--muted); font-size: .8rem; margin-top: 2px; }
+  .transcripcion { max-width: 320px; font-size: .85rem; margin-top: 4px; }
+  .creador { background: var(--accent); color: #fff; border-radius: 4px; padding: 0 5px; font-size: .72rem; font-weight: 600; margin-right: 4px; }
+
+  /* --- Gráfico de barras del Big Five ---
+     Barras horizontales de un solo color en escala fija 0-100.
+     La línea punteada marca 50 (el promedio de la población). */
+  .grafico { display: grid; grid-template-columns: minmax(110px, auto) 1fr; gap: 10px 12px; align-items: center; }
+  .grafico .nombre { font-size: .92rem; }
+  .pista { position: relative; height: 18px; margin-right: 32px; } /* margen para la etiqueta si el puntaje es ~100 */
+  .pista .barra { height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .pista .valor { position: absolute; top: 50%; transform: translateY(-50%); padding-left: 6px; font-size: .85rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
+  .pista .promedio { position: absolute; left: 50%; top: -4px; bottom: -4px; border-left: 1px dashed var(--muted); }
+  .eje { grid-column: 2; margin-right: 32px; display: flex; justify-content: space-between; color: var(--muted); font-size: .75rem; }
+  /* --- Barra de distribución (los 5 rasgos suman 100 %) ---
+     Cada tramo mide lo mismo que su porcentaje; 2px de separación entre tramos. */
+  .apilada { display: flex; gap: 2px; height: 24px; margin: 6px 0 12px; }
+  .apilada .tramo { height: 100%; }
+  .apilada .tramo:last-child { border-radius: 0 4px 4px 0; }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .9rem; }
+  .leyenda .item { display: flex; align-items: center; gap: 6px; }
+  .leyenda .muestra { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .leyenda b { font-variant-numeric: tabular-nums; }
+  .rasgos { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .rasgo h3 { margin: 0 0 6px; font-size: 1rem; display: flex; justify-content: space-between; gap: 8px; }
+  .rasgo p { margin: 0 0 8px; }
+  .rasgo ul { margin: 0; padding-left: 18px; font-size: .88rem; color: var(--muted); }
+  .confianza { font-size: .75rem; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; font-size: .85rem; }
+  .advertencia { color: var(--muted); font-size: .85rem; }
+  .caja.aviso { border-color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>TikTok <span>Scraper</span></h1>
+  <p class="sub">Datos del perfil, sus últimos 10 videos, sus compartidos y una estimación de su personalidad (Big Five).</p>
+
+  <form id="form">
+    <input id="usuario" placeholder="Usuario de TikTok, ej. tittaa.ec" value="tittaa.ec" required>
+    <button type="submit" class="primary">Extraer datos</button>
+    <button type="button" class="secondary" id="btnGuardado">Ver últimos guardados</button>
+    <button type="button" class="primary" id="btnAnalizar">Analizar personalidad</button>
+    <button type="button" class="secondary" id="btnAnalisisGuardado">Ver último análisis</button>
+  </form>
+
+  <div id="estado" class="estado" hidden></div>
+
+  <!-- Resultado del análisis Big Five (se rellena con pintarPersonalidad) -->
+  <section id="personalidad" hidden></section>
+
+  <!-- Datos extraídos (se rellena con pintar) -->
+  <section id="resultado" hidden>
+    <div class="stats" id="stats"></div>
+    <div class="bio" id="bio" hidden></div>
+    <h2>Videos</h2>
+    <div class="tabla-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Video</th><th>Fecha</th><th class="num">Vistas</th><th class="num">Likes</th><th class="num">Coment.</th><th class="num">Compart.</th><th>Comentarios</th></tr></thead>
+        <tbody id="filas"></tbody>
+      </table>
+    </div>
+    <h2>Compartidos (reposts)</h2>
+    <div id="reposts"></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Nombres legibles de los rasgos (las claves son las del JSON del backend)
+const RASGOS = {
+  apertura: "Apertura",
+  responsabilidad: "Responsabilidad",
+  extraversion: "Extraversión",
+  amabilidad: "Amabilidad",
+  neuroticismo: "Neuroticismo",
+};
+
+// Escapa el texto antes de meterlo en el HTML (evita que un comentario con
+// etiquetas <script> se ejecute en la página)
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Convierte "12.4K" / "1.2M" / "1379" / 1379 a número para poder sumar
+function aNumero(v) {
+  if (v == null) return 0;
+  const m = String(v).trim().toUpperCase().match(/^([\d.,]+)\s*([KMB])?$/);
+  if (!m) return 0;
+  const n = parseFloat(m[1].replace(",", "."));
+  return n * ({ K: 1e3, M: 1e6, B: 1e9 }[m[2]] || 1);
+}
+
+function formato(n) {
+  return n.toLocaleString("es-EC", { maximumFractionDigits: 0 });
+}
+
+// Los JSON nuevos traen enteros; los antiguos, textos como "27.1K"
+function cifra(v) {
+  if (v == null) return "—";
+  return typeof v === "number" ? formato(v) : esc(v);
+}
+
+// 9 -> "+ 9", -4 -> "− 4" (para mostrar el cálculo de cada rasgo)
+function signo(n) {
+  return n < 0 ? `− ${Math.abs(n)}` : `+ ${n}`;
+}
+
+function fecha(iso) {
+  return iso ? new Date(iso).toLocaleDateString("es-EC") : "—";
+}
+
+// Un comentario (y sus respuestas) como elemento de lista.
+// Los JSON antiguos guardaban cada comentario como texto plano.
+function itemComentario(c) {
+  if (typeof c === "string") return `<li>${esc(c)}</li>`;
+  const autor = c.es_creador ? `<span class="creador">Creador</span>` : (c.autor ? `<b>@${esc(c.autor)}</b> ` : "");
+  const resp = (c.respuestas || []).length ? `<ul>${c.respuestas.map(itemComentario).join("")}</ul>` : "";
+  return `<li>${autor}${esc(c.texto)}${resp}</li>`;
+}
+
+function mostrarEstado(texto, error = false) {
+  $("estado").textContent = texto;
+  $("estado").className = "estado" + (error ? " error" : "");
+  $("estado").hidden = false;
+}
+
+// ---------------------------------------------------------------------------
+// Datos extraídos
+// ---------------------------------------------------------------------------
+function pintar(d) {
+  const videos = d.videos || [];
+  const totalVistas = videos.reduce((a, v) => a + aNumero(v.vistas), 0);
+  const totalLikes = videos.reduce((a, v) => a + aNumero(v.likes), 0);
+
+  $("stats").innerHTML = [
+    ["Usuario", "@" + esc(d.username) + (d.nickname ? `<div class="label">${esc(d.nickname)}</div>` : "")],
+    ["Seguidores", cifra(d.seguidores)],
+    ["Seguidos", cifra(d.seguidos)],
+    ["Likes del perfil", cifra(d.total_likes)],
+    ["Vistas (10 videos)", formato(totalVistas)],
+    ["Likes (10 videos)", formato(totalLikes)],
+  ].map(([l, v]) => `<div class="stat"><div class="label">${l}</div><div class="valor">${v}</div></div>`).join("");
+
+  $("bio").innerHTML = `<div class="label">Biografía</div>${esc(d.bio) || '<span class="vacio">Sin biografía</span>'}`;
+  $("bio").hidden = !("bio" in d);
+
+  $("filas").innerHTML = videos.length ? videos.map((v, i) => {
+    const id = v.id || (v.url || "").split("/video/")[1] || v.url;
+    const coms = (v.comentarios || []).filter(c => c !== "Sin comentarios o deshabilitados");
+    const celdaComs = coms.length
+      ? `<details><summary>Ver ${coms.length}</summary><ul>${coms.map(itemComentario).join("")}</ul></details>`
+      : `<span class="vacio">Sin comentarios</span>`;
+    const desc = v.descripcion ? `<div class="desc">${esc(v.descripcion)}</div>` : "";
+    const tags = (v.hashtags || []).length ? `<div class="tags">${v.hashtags.map(t => "#" + esc(t)).join(" ")}</div>` : "";
+    const trans = v.transcripcion
+      ? `<details class="transcripcion"><summary>Transcripción</summary>${esc(v.transcripcion)}</details>` : "";
+    return `<tr>
+      <td>${i + 1}</td>
+      <td><a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(id)}</a>${desc}${tags}${trans}</td>
+      <td>${fecha(v.fecha)}</td>
+      <td class="num">${cifra(v.vistas)}</td>
+      <td class="num">${cifra(v.likes)}</td>
+      <td class="num">${cifra(v.num_comentarios)}</td>
+      <td class="num">${cifra(v.compartidos)}</td>
+      <td>${celdaComs}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="8" class="vacio">No se extrajeron videos.</td></tr>`;
+
+  pintarReposts(d);
+  $("resultado").hidden = false;
+}
+
+function pintarReposts(d) {
+  // reposts_disponibles: undefined = JSON antiguo, false = pestaña privada
+  if (d.reposts_disponibles === undefined) {
+    $("reposts").innerHTML = `<p class="vacio">Este JSON es anterior a la extracción de compartidos. Vuelve a extraer los datos.</p>`;
+    return;
+  }
+  if (!d.reposts_disponibles) {
+    $("reposts").innerHTML = `<p class="vacio">La pestaña de Compartidos no es pública en este perfil.</p>`;
+    return;
+  }
+  const reposts = d.reposts || [];
+  if (!reposts.length) {
+    $("reposts").innerHTML = `<p class="vacio">La pestaña es pública pero no se encontraron compartidos.</p>`;
+    return;
+  }
+  $("reposts").innerHTML = `<div class="tabla-wrap"><table>
+    <thead><tr><th>#</th><th>Autor original</th><th>Video</th><th>Fecha</th><th class="num">Vistas</th></tr></thead>
+    <tbody>${reposts.map((r, i) => `<tr>
+      <td>${i + 1}</td>
+      <td>@${esc(r.autor)}</td>
+      <td><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.id)}</a>
+        ${r.descripcion ? `<div class="desc">${esc(r.descripcion)}</div>` : ""}
+        ${(r.hashtags || []).length ? `<div class="tags">${r.hashtags.map(t => "#" + esc(t)).join(" ")}</div>` : ""}</td>
+      <td>${fecha(r.fecha)}</td>
+      <td class="num">${cifra(r.vistas)}</td>
+    </tr>`).join("")}</tbody></table></div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Análisis de personalidad (Big Five)
+// ---------------------------------------------------------------------------
+function pintarPersonalidad(a) {
+  const f = a.fuentes_usadas || {};
+  const fuentes = `Fuentes: ${f.textos_propios ?? 0} textos propios, ${f.videos ?? 0} videos, `
+    + `${f.comentarios_del_creador ?? 0} comentarios del creador, ${f.reposts ?? 0} reposts`
+    + (f.reposts_con_texto_util != null ? ` (${f.reposts_con_texto_util} con texto útil).` : ".");
+
+  // Caso sin datos suficientes: no hay puntajes, solo el motivo
+  if (!a.datos_suficientes) {
+    $("personalidad").innerHTML = `<h2>Personalidad (Big Five) de @${esc(a.username)}</h2>
+      <div class="caja"><p>${esc(a.mensaje)}</p><p class="advertencia">${esc(fuentes)}</p></div>`;
+    $("personalidad").hidden = false;
+    return;
+  }
+
+  const b5 = a.big_five;
+
+  // Distribución: una barra del 100 % dividida en los 5 rasgos según su porcentaje.
+  // La leyenda repite cada porcentaje en texto, así no depende solo del color.
+  // (Los análisis antiguos no traen "distribucion": hay que volver a analizar.)
+  let distribucion = "";
+  if (a.distribucion) {
+    const tramos = Object.entries(RASGOS).map(([clave, nombre]) =>
+      `<div class="tramo" style="width:${a.distribucion[clave]}%; background:var(--${clave})"
+            title="${nombre}: ${a.distribucion[clave]} %"></div>`).join("");
+    const leyenda = Object.entries(RASGOS).map(([clave, nombre]) =>
+      `<span class="item"><span class="muestra" style="background:var(--${clave})"></span>
+         ${nombre} <b>${a.distribucion[clave]} %</b></span>`).join("");
+    distribucion = `<div class="caja">
+      <div class="label">Distribución de la personalidad (suma 100 %)</div>
+      <div class="apilada">${tramos}</div>
+      <div class="leyenda">${leyenda}</div>
+      <p class="advertencia">Rasgo predominante: <b>${RASGOS[a.rasgo_dominante]}</b>.
+        Los porcentajes se calculan con ponderación exponencial: cuanto más alto el puntaje de un rasgo frente a los demás, mayor parte del 100 % se lleva.</p>
+    </div>`;
+  }
+
+  // Gráfico: una fila por rasgo con su barra proporcional al puntaje (0-100).
+  // El atributo title muestra la confianza al pasar el mouse.
+  const filas = Object.entries(RASGOS).map(([clave, nombre]) => {
+    const r = b5[clave];
+    return `<div class="nombre">${nombre}</div>
+      <div class="pista" title="${nombre}: ${r.puntaje}/100 · confianza ${esc(r.confianza)}">
+        <div class="barra" style="width:${r.puntaje}%"></div>
+        <span class="valor" style="left:${r.puntaje}%">${r.puntaje}</span>
+        <div class="promedio"></div>
+      </div>`;
+  }).join("");
+
+  // Tarjetas con el cálculo, la justificación y la evidencia de cada rasgo
+  const tarjetas = Object.entries(RASGOS).map(([clave, nombre]) => {
+    const r = b5[clave];
+    // calculo: base 50 + lo que aportaron las palabras + lo que aportaron las métricas
+    const c = r.calculo;
+    const calculo = c
+      ? `<p class="advertencia">Cálculo: ${c.base} base ${signo(c.aporte_texto)} texto ${signo(c.aporte_metricas)} métricas = <b>${r.puntaje}</b></p>`
+      : "";
+    return `<div class="caja rasgo">
+      <h3><span>${nombre}: ${r.puntaje}${r.porcentaje != null ? ` · ${r.porcentaje} %` : ""}</span><span class="confianza">confianza ${esc(r.confianza)}</span></h3>
+      ${calculo}
+      <p>${esc(r.justificacion)}</p>
+      ${(r.evidencia || []).length ? `<ul>${r.evidencia.map(e => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
+    </div>`;
+  }).join("");
+
+  $("personalidad").innerHTML = `
+    <h2>Personalidad (Big Five) de @${esc(a.username)}</h2>
+    ${a.aviso ? `<div class="caja aviso"><b>Basado en sus compartidos.</b> ${esc(a.aviso)}</div>` : ""}
+    ${distribucion}
+    <div class="caja">
+      <div class="label">Puntaje de cada rasgo (0-100)</div>
+      <div class="grafico">${filas}<div class="eje"><span>0</span><span>50 · promedio</span><span>100</span></div></div>
+    </div>
+    <div class="caja"><div class="label">Resumen</div><p>${esc(a.resumen)}</p>
+      <div class="label">Intereses principales</div>
+      <div class="chips">${(a.intereses_principales || []).map(i => `<span class="chip">${esc(i)}</span>`).join("")}</div>
+    </div>
+    <div class="rasgos">${tarjetas}</div>
+    <p class="advertencia">${esc(fuentes)} Análisis del ${fecha(a.fecha_analisis)}. Método: ${esc(a.metodo || a.modelo)}.<br>${esc(a.advertencia)}</p>`;
+  $("personalidad").hidden = false;
+}
+
+// ---------------------------------------------------------------------------
+// Llamadas a la API
+// ---------------------------------------------------------------------------
+
+// Hace la petición, desactiva los botones mientras espera y muestra los errores
+async function pedir(ruta, mensajeEspera) {
+  const usuario = $("usuario").value.trim();
+  if (!usuario) return null;
+  const botones = document.querySelectorAll("form button");
+  botones.forEach(b => b.disabled = true);
+  mostrarEstado(mensajeEspera);
+  try {
+    const r = await fetch(ruta + encodeURIComponent(usuario));
+    const json = await r.json();
+    if (!r.ok) throw new Error(json.detail || "Error " + r.status);
+    return json;
+  } catch (e) {
+    mostrarEstado("Error: " + e.message, true);
+    return null;
+  } finally {
+    botones.forEach(b => b.disabled = false);
+  }
+}
+
+async function cargarDatos(ruta, mensajeEspera) {
+  const json = await pedir(ruta, mensajeEspera);
+  if (!json) return;
+  const datos = json.datos || json;
+  pintar(datos);
+  const resumen = `Datos de @${datos.username} cargados (${(datos.videos || []).length} videos, ${(datos.reposts || []).length} compartidos).`;
+  if (datos.sesion_activa === false) {
+    mostrarEstado(resumen + " Aviso: la sesión de TikTok expiró y se extrajo como invitado (algunos videos pueden faltar). Renuévala con: python scripts/generar_auth.py", true);
+  } else {
+    mostrarEstado(resumen);
+  }
+}
+
+async function cargarPersonalidad(ruta, mensajeEspera) {
+  const analisis = await pedir(ruta, mensajeEspera);
+  if (!analisis) return;
+  pintarPersonalidad(analisis);
+  if (!analisis.datos_suficientes) {
+    mostrarEstado(`No hay datos suficientes para analizar a @${analisis.username}.`, true);
+  } else if (analisis.base_analisis === "compartidos") {
+    mostrarEstado(`Análisis de @${analisis.username} listo, basado en sus compartidos (confianza baja).`);
+  } else {
+    mostrarEstado(`Análisis de personalidad de @${analisis.username} listo.`);
+  }
+}
+
+$("form").addEventListener("submit", e => {
+  e.preventDefault();
+  cargarDatos("/scrapi/", "Extrayendo datos… se abrirá una ventana de Chrome. Puede tardar 1–2 minutos.");
+});
+$("btnGuardado").addEventListener("click", () => cargarDatos("/datos/", "Cargando datos guardados…"));
+$("btnAnalizar").addEventListener("click", () => cargarPersonalidad("/analizar/", "Analizando la personalidad…"));
+$("btnAnalisisGuardado").addEventListener("click", () => cargarPersonalidad("/personalidad/", "Cargando último análisis…"));
+</script>
+</body>
+</html>

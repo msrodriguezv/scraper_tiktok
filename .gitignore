@@ -1,4 +1,11 @@
+# Sesión de TikTok (contiene tokens sensibles)
 state.json
 
 # Respuestas generadas por el scraper
-datos_tiktok_*.json
+data/*.json
+
+# Python
+__pycache__/
+*.pyc
+env/
+.venv/
